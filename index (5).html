@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IT Helpdesk Complaint Management System</title>
+
+<style>
+body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: #eef2f7;
+    margin: 0;
+    padding: 20px;
+}
+.hidden { display: none; }
+.container, .box {
+    max-width: 1200px;
+    margin: auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+h1, h2, h3 { text-align: center; }
+input, select, button {
+    padding: 10px;
+    margin: 5px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+}
+button {
+    background: #3498db;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+button:hover { background: #2980b9; }
+.logout { float: right; background: red; }
+.dashboard {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+.card {
+    flex: 1;
+    padding: 15px;
+    border-radius: 6px;
+    color: white;
+    text-align: center;
+    font-size: 18px;
+}
+.open { background: #e74c3c; }
+.progress { background: #f39c12; }
+.closed { background: #2ecc71; }
+form {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+.actions {
+    display: flex;
+    justify-content: space-between;
+    margin: 15px 0;
+}
+.search { width: 250px; }
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+th {
+    background: #2c3e50;
+    color: white;
+    padding: 10px;
+}
+td {
+    padding: 8px;
+    border-bottom: 1px solid #ddd;
+    text-align: center;
+}
+.viewed { color: green; font-weight: bold; }
+.not-viewed { color: red; font-weight: bold; }
+</style>
+</head>
+
+<body>
+
+<!-- LOGIN -->
+<div class="box" id="loginBox">
+    <h2>IT Helpdesk Login</h2>
+    <select id="role">
+        <option value="user">User</option>
+        <option value="admin">Admin</option>
+    </select><br>
+    <input type="text" id="username" placeholder="Username"><br>
+    <input type="password" id="password" placeholder="Password (Admin only)"><br>
+    <button onclick="login()">Login</button>
+</div>
+
+<!-- USER PANEL -->
+<div class="container hidden" id="userPanel">
+    <button class="logout" onclick="logout()">Logout</button>
+    <h2>User Complaint Panel</h2>
+
+    <form id="userForm">
+        <input type="date" id="uDate" required>
+        <input type="text" id="uDesc" placeholder="Problem Description" required>
+        <button type="submit">Submit Complaint</button>
+    </form>
+
+    <h3>Your Complaints</h3>
+    <table id="userTable">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Viewed</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<!-- ADMIN PANEL -->
+<div class="container hidden" id="adminPanel">
+    <button class="logout" onclick="logout()">Logout</button>
+    <h1>IT Helpdesk Complaint Management</h1>
+
+    <div class="dashboard">
+        <div class="card open">Open<br><span id="openCount">0</span></div>
+        <div class="card progress">In Progress<br><span id="progressCount">0</span></div>
+        <div class="card closed">Closed<br><span id="closedCount">0</span></div>
+    </div>
+
+    <form id="complaintForm">
+        <input type="date" id="date" required>
+        <input type="text" id="user" placeholder="User / Department" required>
+        <select id="type" required>
+            <option value="">Complaint Type</option>
+            <option>Software</option>
+            <option>Hardware</option>
+            <option>Network</option>
+            <option>Other</option>
+        </select>
+        <input type="text" id="description" placeholder="Problem Description" required>
+        <input type="text" id="assigned" placeholder="Assigned To" required>
+        <button type="submit">Register Complaint</button>
+    </form>
+
+    <div class="actions">
+        <input type="text" class="search" placeholder="Search..." onkeyup="searchTable(this.value)">
+        <button onclick="exportToExcel()">Export to Excel</button>
+    </div>
+
+    <table id="complaintTable">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Date</th>
+                <th>User</th>
+                <th>Type</th>
+                <th>Description</th>
+                <th>Assigned</th>
+                <th>Status</th>
+                <th>Viewed</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<script>
+let complaints = JSON.parse(localStorage.getItem("complaints")) || [];
+let count = complaints.length + 1;
+
+/* LOGIN */
+function login() {
+    const role = roleSelect = document.getElementById("role").value;
+    const user = document.getElementById("username").value;
+    const pass = document.getElementById("password").value;
+
+    if (role === "admin") {
+        if (user === "admin" && pass === "admin123") {
+            loginSuccess("admin");
+        } else alert("Invalid Admin Credentials");
+    } else {
+        if (!user.trim()) alert("Enter username");
+        else loginSuccess("user", user);
+    }
+}
+
+function loginSuccess(role, user = "") {
+    loginBox.classList.add("hidden");
+    if (role === "admin") {
+        adminPanel.classList.remove("hidden");
+        renderTable();
+    } else {
+        userPanel.classList.remove("hidden");
+        userPanel.dataset.user = user;
+        renderUserComplaints();
+    }
+}
+
+function logout() { location.reload(); }
+
+/* USER SUBMISSION */
+userForm.addEventListener("submit", e => {
+    e.preventDefault();
+    complaints.push({
+        id: "CMP-" + count++,
+        date: uDate.value,
+        user: userPanel.dataset.user,
+        type: "User",
+        desc: uDesc.value,
+        assigned: "IT",
+        status: "Open",
+        viewed: false
+    });
+    localStorage.setItem("complaints", JSON.stringify(complaints));
+    alert("Complaint Submitted");
+    e.target.reset();
+    renderUserComplaints();
+});
+
+/* ADMIN SUBMISSION */
+complaintForm.addEventListener("submit", e => {
+    e.preventDefault();
+    complaints.push({
+        id: "CMP-" + count++,
+        date: date.value,
+        user: user.value,
+        type: type.value,
+        desc: description.value,
+        assigned: assigned.value,
+        status: "Open",
+        viewed: true
+    });
+    renderTable();
+    e.target.reset();
+});
+
+/* ADMIN TABLE */
+function renderTable() {
+    const tbody = document.querySelector("#complaintTable tbody");
+    tbody.innerHTML = "";
+
+    complaints.forEach((c, i) => {
+        complaints[i].viewed = true;
+
+        const row = tbody.insertRow();
+        row.innerHTML = `
+            <td>${c.id}</td>
+            <td>${c.date}</td>
+            <td>${c.user}</td>
+            <td>${c.type}</td>
+            <td>${c.desc}</td>
+            <td>${c.assigned}</td>
+            <td>
+                <select onchange="changeStatus(${i}, this.value)">
+                    <option ${c.status === "Open" ? "selected" : ""}>Open</option>
+                    <option ${c.status === "In Progress" ? "selected" : ""}>In Progress</option>
+                    <option ${c.status === "Closed" ? "selected" : ""}>Closed</option>
+                </select>
+            </td>
+            <td class="viewed">Viewed</td>
+        `;
+    });
+
+    localStorage.setItem("complaints", JSON.stringify(complaints));
+    updateDashboard();
+}
+
+/* USER VIEW */
+function renderUserComplaints() {
+    const tbody = document.querySelector("#userTable tbody");
+    tbody.innerHTML = "";
+    const uname = userPanel.dataset.user;
+
+    complaints.filter(c => c.user === uname).forEach(c => {
+        const row = tbody.insertRow();
+        row.innerHTML = `
+            <td>${c.id}</td>
+            <td>${c.date}</td>
+            <td>${c.desc}</td>
+            <td class="${c.viewed ? 'viewed' : 'not-viewed'}">
+                ${c.viewed ? "Viewed" : "Not Viewed"}
+            </td>
+        `;
+    });
+}
+
+/* STATUS + DASHBOARD */
+function changeStatus(i, val) {
+    complaints[i].status = val;
+    renderTable();
+}
+function updateDashboard() {
+    openCount.innerText = complaints.filter(c => c.status === "Open").length;
+    progressCount.innerText = complaints.filter(c => c.status === "In Progress").length;
+    closedCount.innerText = complaints.filter(c => c.status === "Closed").length;
+}
+
+/* EXTRAS */
+function exportToExcel() {
+    const table = complaintTable.outerHTML;
+    const file = new Blob(['\ufeff' + table], { type: 'application/vnd.ms-excel' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(file);
+    a.download = 'IT_Complaints.xls';
+    a.click();
+}
+function searchTable(v) {
+    v = v.toLowerCase();
+    document.querySelectorAll('#complaintTable tbody tr').forEach(r => {
+        r.style.display = r.innerText.toLowerCase().includes(v) ? '' : 'none';
+    });
+}
+</script>
+
+</body>
+</html>
